@@ -2,6 +2,8 @@ import time
 import argparse
 import json
 from playwright.sync_api import sync_playwright
+from ide_checker import IDEChecker
+from preview_checker import PreviewChecker
 
 class IDETest:
     def __init__(self, ide_url):
@@ -20,56 +22,47 @@ class IDETest:
                 page.wait_for_load_state('domcontentloaded')
                 time.sleep(2)
                 
-                # Run all the test modules sequentially and store results
-                self.test_files_and_folders(page)
-                time.sleep(5) 
-                self.test_preview(page)
+                # Initialize checkers
+                ide_checker = IDEChecker(page)
+                preview_checker = PreviewChecker(page)
+                
+                # Run checks
+                ide_results = ide_checker.check_ide_status()
+                preview_results = preview_checker.check_preview_status()
+                
+                # Combine results
+                self.test_results = {
+                    "ide_checks": ide_results,
+                    "preview_checks": preview_results
+                }
+                
+                # Save results to file
+                with open('test_results.json', 'w') as f:
+                    json.dump(self.test_results, f, indent=2)
+                
+                print("Results saved to test_results.json")
                 
             except Exception as e:
-                print(f"❌ An error occurred: {str(e)}")
+                print(f"Error during test: {str(e)}")
+                self.test_results = {
+                    "ide_checks": {
+                        "test_files_and_folders": "fail",
+                        "test_search_bar": "fail",
+                        "screenshots": "ide.png"
+                    },
+                    "preview_checks": {
+                        "preview_iframe": "fail",
+                        "application_state": "unknown",
+                        "screenshots": "preview.png",
+                        "test_compilation": "fail"
+                    }
+                }
             
             finally:
-                # Output the summary of test results as JSON which can be used for reporting
                 self.print_summary()
 
-    def test_files_and_folders(self, page):
-        # Get files and folders (using new selector)
-        files_and_folders = page.evaluate('''() => {
-            const items = Array.from(document.querySelectorAll(".monaco-highlighted-label"));
-            return items
-                .map(item => item.textContent.trim())
-                .filter(text => text === "challenge");  // Look for "challenge"
-        }''')
-
-        # Check if the files and folders section has the correct content
-        if files_and_folders:
-            self.test_results["test_files_and_folders"] = "pass"
-        else:
-            self.test_results["test_files_and_folders"] = "fail"
-
-    def test_preview(self, page):
-        # Look for Preview element (checking for iframe presence)
-        preview_element = page.query_selector('#hr-realtime-preview-iframe')
-
-        # Check if the preview iframe is present
-        if preview_element:
-            self.test_results["test_preview"] = "pass"
-        else:
-            self.test_results["test_preview"] = "fail"
-
-    # Add more test modules as needed, for example:
-    def test_search_functionality(self, page):
-        print("\n🔍 Testing Search Functionality...")
-        search_box = page.query_selector('input[type="search"]')
-        if search_box:
-            print("  ✅ Search box found!")
-        else:
-            print("  ❌ Search box not found.")
-
     def print_summary(self):
-        # Output the test results in JSON format
         print(json.dumps(self.test_results, indent=2))
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run IDE tests in sequence.")
@@ -78,3 +71,6 @@ if __name__ == "__main__":
     
     ide_test = IDETest(args.ide_url)
     ide_test.run()
+
+
+# https://vm-6a4d2dce-d20f-4d1d-93b8-8627694ba6a5.in-vmprovider.projects.hrcdn.net
